@@ -9,7 +9,10 @@ try:
 except:
     pass
 
-bot = commands.Bot(command_prefix="!")
+# ตั้ง intents สำหรับ Discord.py เวอร์ชันใหม่
+intents = discord.Intents.default()
+intents.members = True  # จำเป็นถ้าเราจะเรียกชื่อผู้ใช้จาก ID
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # เก็บปาร์ตี้ {party_name: [user_id, ...]}
 parties = {}
