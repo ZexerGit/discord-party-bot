@@ -1,201 +1,163 @@
 import os
 import discord
 from discord.ext import commands
-from flask import Flask
-from threading import Thread
 
-# =======================
-# Flask keep-alive server
-# =======================
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Bot is running!"
-
-def run():
-    app.run(host="0.0.0.0", port=8080)
-
-def keep_alive():
-    Thread(target=run).start()
-
-
-# =======================
-# Discord Bot
-# =======================
+# ------------------------------
+# ตั้งค่า Intents
+# ------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ตั้งค่ารอบ / ช่อง / บอส
-times = ["16.00", "18.00", "22.00"]
-channels = ["CH-1", "CH-2"]
-bosses = ["Sylph", "Undine", "Gnome", "Salamander"]
+# ------------------------------
+# โครงสร้างปาร์ตี้
+# ------------------------------
+parties = {
+    "16.00": {
+        "CH-1": {"Sylph": [], "Undine": [], "Gnome": [], "Salamander": []},
+        "CH-2": {"Sylph": [], "Undine": [], "Gnome": [], "Salamander": []}
+    },
+    "18.00": {
+        "CH-1": {"Sylph": [], "Undine": [], "Gnome": [], "Salamander": []},
+        "CH-2": {"Sylph": [], "Undine": [], "Gnome": [], "Salamander": []}
+    },
+    "22.00": {
+        "CH-1": {"Sylph": [], "Undine": [], "Gnome": [], "Salamander": []},
+        "CH-2": {"Sylph": [], "Undine": [], "Gnome": [], "Salamander": []}
+    }
+}
 
-# เก็บข้อมูลปาร์ตี้
-parties = {t: {c: {b: [] for b in bosses} for c in channels} for t in times}
-user_party = {}  # เก็บ user_id → (time, channel, boss)
+user_party = {}  # user_id → (time, ch, boss)
 
-
-# =======================
-# UI Components (Dropdown)
-# =======================
-class TimeSelect(discord.ui.Select):
-    def __init__(self):
-        options = [discord.SelectOption(label=t, description=f"เลือกเวลา {t}") for t in times]
-        super().__init__(placeholder="เลือกเวลา", options=options)
+# ------------------------------
+# UI Dropdowns (เวลา / CH / Boss)
+# ------------------------------
+class BossSelect(discord.ui.Select):
+    def __init__(self, time, ch):
+        self.time = time
+        self.ch = ch
+        options = [discord.SelectOption(label=boss) for boss in parties[time][ch].keys()]
+        super().__init__(placeholder="เลือกบอส", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        time = self.values[0]
-        await interaction.response.edit_message(
-            content=f"⏰ คุณเลือกเวลา {time}\nเลือก Channel ต่อไป:",
-            view=ChannelView(time)
+        user_id = interaction.user.id
+        user_name = interaction.user.display_name
+        boss = self.values[0]
+
+        if user_id in user_party:
+            await interaction.response.send_message("⚠️ คุณอยู่ปาร์ตี้อื่นอยู่แล้ว ใช้ !leave ก่อน", ephemeral=True)
+            return
+
+        members = parties[self.time][self.ch][boss]
+        if len(members) >= 5:
+            await interaction.response.send_message("❌ ปาร์ตี้นี้เต็มแล้ว", ephemeral=True)
+            return
+
+        members.append(user_name)
+        user_party[user_id] = (self.time, self.ch, boss)
+        await interaction.response.send_message(
+            f"✅ {user_name} เข้าร่วมปาร์ตี้ {self.time} {self.ch} {boss}", ephemeral=True
         )
 
 class ChannelSelect(discord.ui.Select):
     def __init__(self, time):
         self.time = time
-        options = [discord.SelectOption(label=c) for c in channels]
+        options = [discord.SelectOption(label="CH-1"), discord.SelectOption(label="CH-2")]
         super().__init__(placeholder="เลือก Channel", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         ch = self.values[0]
-        await interaction.response.edit_message(
-            content=f"🛡️ คุณเลือก {self.time} {ch}\nเลือกบอสต่อไป:",
-            view=BossView(self.time, ch)
-        )
+        view = discord.ui.View()
+        view.add_item(BossSelect(self.time, ch))
+        await interaction.response.send_message(f"เลือก Boss ใน {ch}", view=view, ephemeral=True)
 
-class BossSelect(discord.ui.Select):
-    def __init__(self, time, ch):
-        self.time = time
-        self.ch = ch
-        options = [discord.SelectOption(label=b) for b in bosses]
-        super().__init__(placeholder="เลือกบอส", options=options)
+class TimeSelect(discord.ui.Select):
+    def __init__(self):
+        options = [discord.SelectOption(label=t) for t in parties.keys()]
+        super().__init__(placeholder="เลือกเวลา", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        boss = self.values[0]
-        uid = interaction.user.id
-        uname = interaction.user.name
+        time = self.values[0]
+        view = discord.ui.View()
+        view.add_item(ChannelSelect(time))
+        await interaction.response.send_message(f"เลือก Channel สำหรับเวลา {time}", view=view, ephemeral=True)
 
-        if uid in user_party:
-            await interaction.response.send_message(
-                f"⚠️ {uname} คุณ join ไปแล้ว ต้องใช้ `!leave` ก่อน", ephemeral=True
-            )
+# ------------------------------
+# คำสั่งบอท
+# ------------------------------
+@bot.command()
+async def join(ctx):
+    """เริ่มต้นการ Join แบบเมนูเลือก"""
+    view = discord.ui.View()
+    view.add_item(TimeSelect())
+    await ctx.send("เลือกเวลา:", view=view)
+
+@bot.command()
+async def leave(ctx):
+    """ออกจากปาร์ตี้"""
+    user_id = ctx.author.id
+    if user_id not in user_party:
+        await ctx.send("⚠️ คุณไม่ได้อยู่ในปาร์ตี้ใดๆ")
+        return
+
+    time, ch, boss = user_party[user_id]
+    parties[time][ch][boss].remove(ctx.author.display_name)
+    del user_party[user_id]
+    await ctx.send(f"↩️ {ctx.author.display_name} ออกจากปาร์ตี้ {time} {ch} {boss}")
+
+@bot.command()
+async def list(ctx, time: str = None):
+    """แสดงรายชื่อผู้เล่น"""
+    if time:
+        if time not in parties:
+            await ctx.send("⚠️ เวลาไม่ถูกต้อง (ใช้ 16.00, 18.00, 22.00)")
             return
+        msg = f"📋 รายชื่อปาร์ตี้เวลา {time}\n"
+        for ch in parties[time]:
+            msg += f"\n**{ch}**\n"
+            for boss, members in parties[time][ch].items():
+                names = ", ".join(members) if members else "-"
+                msg += f"- {boss}: {names}\n"
+        await ctx.send(msg)
+    else:
+        msg = "📋 **รายชื่อทุกเวลา**\n"
+        for t in parties:
+            msg += f"\n⏰ เวลา {t}\n"
+            for ch in parties[t]:
+                msg += f"\n**{ch}**\n"
+                for boss, members in parties[t][ch].items():
+                    names = ", ".join(members) if members else "-"
+                    msg += f"- {boss}: {names}\n"
+        await ctx.send(msg)
 
-        if len(parties[self.time][self.ch][boss]) >= 5:
-            await interaction.response.send_message(
-                f"❌ ปาร์ตี้ {self.time} {self.ch} {boss} เต็มแล้ว", ephemeral=True
-            )
-            return
+@bot.command()
+async def clear(ctx):
+    """ล้างข้อมูลปาร์ตี้ทั้งหมด"""
+    for t in parties:
+        for ch in parties[t]:
+            for boss in parties[t][ch]:
+                parties[t][ch][boss] = []
+    user_party.clear()
+    await ctx.send("🧹 ล้างข้อมูลปาร์ตี้ทั้งหมดแล้ว")
 
-        parties[self.time][self.ch][boss].append(uid)
-        user_party[uid] = (self.time, self.ch, boss)
-        await interaction.response.send_message(
-            f"✅ {uname} เข้าปาร์ตี้ {self.time} {self.ch} {boss}", ephemeral=False
-        )
+@bot.command(name="helpme")
+async def helpme(ctx):
+    """แสดงวิธีใช้งาน"""
+    msg = (
+        "📖 **วิธีใช้งานบอทปาร์ตี้**\n"
+        "`!join` → เลือกเวลา, Channel, Boss เพื่อเข้าปาร์ตี้\n"
+        "`!leave` → ออกจากปาร์ตี้ปัจจุบัน\n"
+        "`!list [เวลา]` → ดูรายชื่อปาร์ตี้ (ใส่เวลาเช่น `16.00` หรือไม่ใส่เพื่อดูทั้งหมด)\n"
+        "`!clear` → ล้างข้อมูลปาร์ตี้ทั้งหมด (แอดมินใช้)\n"
+    )
+    await ctx.send(msg)
 
-class TimeView(discord.ui.View):
-    def __init__(self):
-        super().__init__()
-        self.add_item(TimeSelect())
-
-class ChannelView(discord.ui.View):
-    def __init__(self, time):
-        super().__init__()
-        self.add_item(ChannelSelect(time))
-
-class BossView(discord.ui.View):
-    def __init__(self, time, ch):
-        super().__init__()
-        self.add_item(BossSelect(time, ch))
-
-
-# =======================
-# Bot Commands
-# =======================
+# ------------------------------
+# Run bot
+# ------------------------------
 @bot.event
 async def on_ready():
     print(f"✅ Bot Online as {bot.user}")
 
-# interactive join
-@bot.command()
-async def join(ctx):
-    await ctx.send("โปรดเลือกเวลา:", view=TimeView())
-
-# leave
-@bot.command()
-async def leave(ctx):
-    uid = ctx.author.id
-    uname = ctx.author.name
-    if uid not in user_party:
-        await ctx.send(f"⚠️ {uname} คุณไม่ได้อยู่ในปาร์ตี้")
-        return
-    time, ch, boss = user_party[uid]
-    parties[time][ch][boss].remove(uid)
-    del user_party[uid]
-    await ctx.send(f"✅ {uname} ออกจากปาร์ตี้ {time} {ch} {boss}")
-
-# list
-@bot.command()
-async def list(ctx, time: str, channel: str = None, boss: str = None):
-    if time not in parties:
-        await ctx.send(f"❌ ไม่มีปาร์ตี้เวลา `{time}`")
-        return
-
-    if channel and boss:
-        if channel not in parties[time] or boss not in parties[time][channel]:
-            await ctx.send(f"❌ ไม่พบปาร์ตี้ `{time} {channel} {boss}`")
-            return
-        members = parties[time][channel][boss]
-        if not members:
-            await ctx.send(f"📋 ปาร์ตี้ `{time} {channel} {boss}` ยังไม่มีคน")
-        else:
-            names = [bot.get_user(uid).name if bot.get_user(uid) else str(uid) for uid in members]
-            await ctx.send(f"📋 ปาร์ตี้ `{time} {channel} {boss}` ({len(members)}/5): {', '.join(names)}")
-        return
-
-    # list ทุกปาร์ตี้ในเวลานั้น
-    msg = f"📋 รายชื่อปาร์ตี้ทั้งหมด เวลา `{time}`:\n"
-    for ch in parties[time]:
-        for b in parties[time][ch]:
-            members = parties[time][ch][b]
-            if members:
-                names = [bot.get_user(uid).name if bot.get_user(uid) else str(uid) for uid in members]
-                msg += f"- {ch} {b} ({len(members)}/5): {', '.join(names)}\n"
-            else:
-                msg += f"- {ch} {b} (0/5): ยังไม่มีคน\n"
-    await ctx.send(msg)
-
-# clear
-@bot.command()
-async def clear(ctx):
-    global parties, user_party
-    parties = {t: {c: {b: [] for b in bosses} for c in channels} for t in times}
-    user_party = {}
-    await ctx.send("🧹 เคลียร์รายชื่อปาร์ตี้ทั้งหมดแล้ว")
-
-# custom help
-@bot.command(name="myhelp")
-async def myhelp(ctx):
-    help_text = (
-        "**📌 วิธีใช้งานบอทปาร์ตี้**\n\n"
-        "**!join** → ลงชื่อแบบเลือกเวลา/Channel/บอสผ่านเมนู\n"
-        "**!leave** → ออกจากปาร์ตี้ที่คุณอยู่\n"
-        "**!list <เวลา> <ช่อง> <บอส>** → ดูรายชื่อปาร์ตี้เฉพาะบอส\n"
-        "**!list <เวลา>** → ดูรายชื่อปาร์ตี้ทั้งหมดในเวลานั้น\n"
-        "**!clear** → ล้างรายชื่อปาร์ตี้ทั้งหมด\n"
-        "**!myhelp** → แสดงข้อความช่วยเหลือนี้\n\n"
-        "**🕒 รอบ:** 16.00 / 18.00 / 22.00\n"
-        "**🏰 ช่อง:** CH-1 / CH-2\n"
-        "**👹 บอส:** Sylph / Undine / Gnome / Salamander\n"
-        "ตี้ละ 5 คน / คนเดียว join ได้แค่ปาร์ตี้เดียว ต้อง `!leave` ก่อน join ใหม่"
-    )
-    await ctx.send(help_text)
-
-
-# =======================
-# Run bot
-# =======================
-keep_alive()
 bot.run(os.environ["DISCORD_BOT_TOKEN"])
