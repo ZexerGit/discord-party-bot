@@ -11,7 +11,9 @@ except:
 
 # ตั้ง intents
 intents = discord.Intents.default()
-intents.members = True
+intents.members = True          # สำหรับเรียกชื่อสมาชิก
+intents.message_content = True  # สำหรับอ่านคำสั่งข้อความ
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # เก็บปาร์ตี้ {party_name: [user_id, ...]}
