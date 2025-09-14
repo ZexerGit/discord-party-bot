@@ -106,7 +106,7 @@ class JoinView(discord.ui.View):
 
         if self.selected_count > remaining_slots:
             await interaction.response.send_message(
-                f"⚠️ ปาร์ตี้เหลือ {remaining_slots} ที่ แต่คุณเลือก {self.selected_count} คน",
+                f"⚠️ ไม่สามารถเข้าร่วมปาร์ตี้ได้เนื่องจาก ปาร์ตี้เหลือ {remaining_slots} ที่ แต่คุณเลือก {self.selected_count} คน กรุณาลงใหม่",
                 ephemeral=True
             )
             return
