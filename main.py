@@ -117,7 +117,7 @@ class JoinView(discord.ui.View):
 
         await interaction.response.send_message(
             f"✅ {self.user.display_name} เข้าปาร์ตี้ {self.selected_time} {self.selected_ch} {self.selected_boss} "
-            f"({len(members)}/5 คน, ลงแทน {self.selected_count} คน)",
+            f"({len(members)}/5 คน, ลงแทน {self.selected_count-1} คน)",
             ephemeral=True
         )
 
