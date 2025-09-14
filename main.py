@@ -2,6 +2,7 @@ import os
 import discord
 from discord.ext import commands
 from discord import app_commands
+from datetime import datetime, timedelta
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -16,9 +17,8 @@ parties = {t: {ch: {boss: [] for boss in ["Sylph", "Undine", "Gnome", "Salamande
             for ch in ["CH-1", "CH-2"]} for t in ["16.00", "18.00", "22.00"]}
 
 user_party = {}  # user_id -> (time, ch, boss, count)
-
-# เวลาเริ่ม join แบบ default
-start_join_time = "12.00"
+start_join_time = "12.00"  # เวลา join เริ่มต้นตามไทย (UTC+7)
+ADMIN_PASSWORD = "osysadmin"
 
 # ------------------------------
 # UI Join View
@@ -91,13 +91,15 @@ class JoinView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
 
     async def confirm_callback(self, interaction: discord.Interaction):
-        from datetime import datetime
-        # ตรวจสอบเวลา join
-        now_hour = int(datetime.utcnow().astimezone().strftime("%H"))
-        start_hour = int(start_join_time.split(".")[0])
-        if now_hour < start_hour:
+        # ------------------------------
+        # เช็คเวลา join ตามไทย
+        # ------------------------------
+        thai_now = datetime.utcnow() + timedelta(hours=7)
+        now_hour_min = int(thai_now.strftime("%H%M"))
+        start_hour_min = int(start_join_time.replace(".", ""))
+        if now_hour_min < start_hour_min:
             await interaction.response.send_message(
-                f"⏳ ยังไม่ถึงเวลาที่กำหนด โปรดรอ {start_join_time} เป็นต้นไป", ephemeral=True
+                f"⏳ ยังไม่ถึงเวลาที่กำหนดในการ join ({start_join_time} น. ตามไทย)", ephemeral=True
             )
             return
 
@@ -119,18 +121,18 @@ class JoinView(discord.ui.View):
 
         if self.selected_count > remaining_slots:
             await interaction.response.send_message(
-                f"⚠️ ไม่สามารถเข้าร่วมปาร์ตี้ได้ เนื่องจากปาร์ตี้เหลือ {remaining_slots} ที่ แต่คุณเลือก {self.selected_count} คน",
+                f"⚠️ ไม่สามารถเข้าร่วมปาร์ตี้ได้เนื่องจาก ปาร์ตี้เหลือ {remaining_slots} ที่ แต่คุณเลือก {self.selected_count} คน",
                 ephemeral=True
             )
             return
 
+        # ✅ เพิ่มผู้เล่น
         members.extend([uid] * self.selected_count)
         user_party[uid] = (self.selected_time, self.selected_ch, self.selected_boss, self.selected_count)
 
         await interaction.response.send_message(
             f"✅ {self.user.display_name} เข้าปาร์ตี้ {self.selected_time} {self.selected_ch} {self.selected_boss} "
-            f"({len(members)}/5 คน, ลงแทน {self.selected_count-1} คน)",
-            ephemeral=True
+            f"({len(members)}/5 คน, ลงแทน {self.selected_count-1} คน)", ephemeral=True
         )
 
     async def leave_callback(self, interaction: discord.Interaction):
@@ -147,20 +149,18 @@ class JoinView(discord.ui.View):
 
         del user_party[uid]
         await interaction.response.send_message(
-            f"↩️ {self.user.display_name} ออกจากปาร์ตี้ {time} {ch} {boss} (คืน {count} ที่นั่ง)",
-            ephemeral=True
+            f"↩️ {self.user.display_name} ออกจากปาร์ตี้ {time} {ch} {boss} (คืน {count} ที่นั่ง)", ephemeral=True
         )
 
 # ------------------------------
-# UI Delete View
+# UI Delete View (สำหรับ Admin)
 # ------------------------------
 class DeleteView(discord.ui.View):
-    def __init__(self, password):
+    def __init__(self):
         super().__init__(timeout=180)
         self.selected_time = None
         self.selected_ch = None
         self.selected_boss = None
-        self.password = password
 
         self.time_select = discord.ui.Select(
             placeholder="เลือกเวลา",
@@ -183,9 +183,9 @@ class DeleteView(discord.ui.View):
         self.boss_select.callback = self.boss_callback
         self.add_item(self.boss_select)
 
-        self.delete_button = discord.ui.Button(label="🗑️ ลบสมาชิก", style=discord.ButtonStyle.red)
-        self.delete_button.callback = self.delete_callback
-        self.add_item(self.delete_button)
+        self.confirm_button = discord.ui.Button(label="✅ ลบทั้งหมดในปาร์ตี้", style=discord.ButtonStyle.red)
+        self.confirm_button.callback = self.confirm_callback
+        self.add_item(self.confirm_button)
 
     async def time_callback(self, interaction: discord.Interaction):
         self.selected_time = self.time_select.values[0]
@@ -199,25 +199,21 @@ class DeleteView(discord.ui.View):
         self.selected_boss = self.boss_select.values[0]
         await interaction.response.defer(ephemeral=True)
 
-    async def delete_callback(self, interaction: discord.Interaction):
-        if self.password != "osysadmin":
-            await interaction.response.send_message("❌ รหัสผ่านไม่ถูกต้อง", ephemeral=True)
-            return
-
+    async def confirm_callback(self, interaction: discord.Interaction):
         if not (self.selected_time and self.selected_ch and self.selected_boss):
-            await interaction.response.send_message("⚠️ ต้องเลือก เวลา/CH/Boss ก่อนลบ", ephemeral=True)
+            await interaction.response.send_message("⚠️ ต้องเลือก เวลา / CH / Boss ก่อน", ephemeral=True)
             return
 
-        members = parties[self.selected_time][self.selected_ch][self.selected_boss]
-        removed_count = len(members)
-        for uid in members:
-            if uid in user_party:
-                del user_party[uid]
+        # ลบสมาชิกทั้งหมดในปาร์ตี้นั้น
         parties[self.selected_time][self.selected_ch][self.selected_boss] = []
+        # ลบ user_party ที่ตรงกัน
+        to_delete = [uid for uid, (t, ch, boss, _) in user_party.items()
+                     if t == self.selected_time and ch == self.selected_ch and boss == self.selected_boss]
+        for uid in to_delete:
+            del user_party[uid]
 
         await interaction.response.send_message(
-            f"🗑️ ลบสมาชิก {removed_count} คน จาก {self.selected_time} {self.selected_ch} {self.selected_boss}",
-            ephemeral=True
+            f"🗑️ ลบข้อมูลปาร์ตี้ {self.selected_time} {self.selected_ch} {self.selected_boss} เรียบร้อย", ephemeral=True
         )
 
 # ------------------------------
@@ -240,7 +236,10 @@ async def list_party(interaction: discord.Interaction, time: str = None):
         for ch in parties[time]:
             desc = ""
             for boss, members in parties[time][ch].items():
-                names = [guild.get_member(uid).display_name if guild.get_member(uid) else str(uid) for uid in members]
+                names = []
+                for uid in members:
+                    member = guild.get_member(uid)
+                    names.append(member.display_name if member else str(uid))
                 desc += f"**{boss}** ({len(members)}/5): {', '.join(names) if names else '-'}\n"
             embed.add_field(name=ch, value=desc, inline=False)
     else:
@@ -249,7 +248,10 @@ async def list_party(interaction: discord.Interaction, time: str = None):
             for ch in parties[t]:
                 desc = ""
                 for boss, members in parties[t][ch].items():
-                    names = [guild.get_member(uid).display_name if guild.get_member(uid) else str(uid) for uid in members]
+                    names = []
+                    for uid in members:
+                        member = guild.get_member(uid)
+                        names.append(member.display_name if member else str(uid))
                     desc += f"**{boss}** ({len(members)}/5): {', '.join(names) if names else '-'}\n"
                 embed.add_field(name=f"{t} {ch}", value=desc, inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -263,22 +265,6 @@ async def clear(interaction: discord.Interaction):
     user_party.clear()
     await interaction.response.send_message("🧹 ล้างข้อมูลปาร์ตี้ทั้งหมดแล้ว", ephemeral=True)
 
-@bot.tree.command(name="settime", description="ตั้งเวลาเริ่ม join (admin)")
-@app_commands.describe(time="เวลาเริ่ม join เช่น 12.00", password="รหัสผ่าน admin")
-async def settime(interaction: discord.Interaction, time: str, password: str):
-    global start_join_time
-    if password != "osysadmin":
-        await interaction.response.send_message("❌ รหัสผ่านไม่ถูกต้อง", ephemeral=True)
-        return
-    start_join_time = time
-    await interaction.response.send_message(f"⏰ ตั้งเวลาเริ่ม join เป็น {start_join_time} เรียบร้อยแล้ว", ephemeral=True)
-
-@bot.tree.command(name="delete", description="ลบสมาชิกทั้งหมดในปาร์ตี้ (admin)")
-@app_commands.describe(password="รหัสผ่าน admin")
-async def delete(interaction: discord.Interaction, password: str):
-    view = DeleteView(password)
-    await interaction.response.send_message("เลือก เวลา / Channel / Boss เพื่อลบสมาชิก", view=view, ephemeral=True)
-
 @bot.tree.command(name="helpme", description="วิธีใช้งานบอทปาร์ตี้")
 async def helpme(interaction: discord.Interaction):
     msg = (
@@ -286,10 +272,29 @@ async def helpme(interaction: discord.Interaction):
         "`/join` → เลือก เวลา / Channel / Boss / จำนวนคน\n"
         "`/list [เวลา]` → ดูรายชื่อปาร์ตี้ (ใส่เวลา เช่น 16.00 หรือไม่ใส่เพื่อดูทั้งหมด)\n"
         "`/clear` → ล้างข้อมูลปาร์ตี้ทั้งหมด\n"
-        "`/settime [เวลา] [password]` → ตั้งเวลาเริ่ม join (admin)\n"
-        "`/delete [password]` → ลบสมาชิกทั้งหมดในปาร์ตี้ (admin)\n"
+        "`/settime [เวลา]` → กำหนดเวลาเริ่ม join (Admin Password ต้องใส่)\n"
+        "`/delete` → ลบสมาชิกทั้งหมดในปาร์ตี้ที่เลือก (Admin Password ต้องใส่)\n"
     )
     await interaction.response.send_message(msg, ephemeral=True)
+
+@bot.tree.command(name="settime", description="ปรับเวลาเริ่ม join (Admin Password ต้องใส่)")
+@app_commands.describe(time="เวลา เช่น 12.00", password="รหัส Admin")
+async def settime(interaction: discord.Interaction, time: str, password: str):
+    global start_join_time
+    if password != ADMIN_PASSWORD:
+        await interaction.response.send_message("❌ รหัสไม่ถูกต้อง", ephemeral=True)
+        return
+    start_join_time = time
+    await interaction.response.send_message(f"🕛 เวลาเริ่ม join ถูกตั้งเป็น {time} ตามไทย", ephemeral=True)
+
+@bot.tree.command(name="delete", description="ลบสมาชิกทั้งหมดในปาร์ตี้ที่เลือก (Admin Password ต้องใส่)")
+@app_commands.describe(password="รหัส Admin")
+async def delete(interaction: discord.Interaction, password: str):
+    if password != ADMIN_PASSWORD:
+        await interaction.response.send_message("❌ รหัสไม่ถูกต้อง", ephemeral=True)
+        return
+    view = DeleteView()
+    await interaction.response.send_message("เลือก เวลา / Channel / Boss แล้วกด ✅ เพื่อลบสมาชิกทั้งหมด", view=view, ephemeral=True)
 
 # ------------------------------
 # Run bot
