@@ -313,36 +313,25 @@ async def list_party(interaction: discord.Interaction, time: str = None):
             color=0x9400D3
         )
 
-        # รวมข้อมูลจากทุก CH ในเวลานั้น
-        combined_bosses = {}
-        for ch_bosses in parties[t].values():  # parties[t][ch]
-            for boss, members in ch_bosses.items():
-                if boss not in combined_bosses:
-                    combined_bosses[boss] = []
-                combined_bosses[boss].extend(members)
-
-        # จัด Sylph กับ Undine บน
-        for boss in ["Sylph", "Undine"]:
-            if boss in combined_bosses:
-                embed.add_field(
-                    name=f"{boss_icons[boss]} {boss}",
-                    value=format_members_vertical_numbered(combined_bosses[boss]),
-                    inline=True
-                )
-
-        # จัด Gnome กับ Salamander ล่าง
-        for boss in ["Gnome", "Salamander"]:
-            if boss in combined_bosses:
-                embed.add_field(
-                    name=f"{boss_icons[boss]} {boss}",
-                    value=format_members_vertical_numbered(combined_bosses[boss]),
-                    inline=True
-                )
+        # วน boss ตามลำดับ (Sylph/Undine บน, Gnome/Salamander ล่าง)
+        for boss_group in [["Sylph", "Undine"], ["Gnome", "Salamander"]]:
+            for boss in boss_group:
+                if any(boss in parties[t][ch] for ch in parties[t]):
+                    value_lines = []
+                    for ch, bosses in parties[t].items():
+                        if boss in bosses:
+                            value_lines.append(f"**{ch}**\n{format_members_vertical_numbered(bosses[boss])}")
+                    embed.add_field(
+                        name=f"{boss_icons[boss]} {boss}",
+                        value="\n".join(value_lines),
+                        inline=True
+                    )
 
         embed.set_footer(text="Party System | By XeZer 😎")
         embeds.append(embed)
 
     await interaction.response.send_message(embeds=embeds, ephemeral=True)
+
 
 
 
