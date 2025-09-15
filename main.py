@@ -286,42 +286,44 @@ async def mhjoin(interaction: discord.Interaction):
 @app_commands.describe(time="ใส่เวลา เช่น 16.00 (ไม่ใส่เพื่อดูทั้งหมด)")
 async def list_party(interaction: discord.Interaction, time: str = None):
     guild = interaction.guild
-
     member_numbers = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
 
     def format_members_vertical_numbered(members):
         names = [
-            guild.get_member(uid).display_name
-            if guild.get_member(uid) else str(uid) for uid in members
+            guild.get_member(uid).display_name if guild.get_member(uid) else str(uid)
+            for uid in members
         ]
         while len(names) < 5:
             names.append("-")
-        return "\n".join(f"{member_numbers[i]} {name[:12]}"
-                         for i, name in enumerate(names[:5]))
+        return "\n".join(f"{member_numbers[i]} {name[:12]}" for i, name in enumerate(names[:5]))
 
     boss_icons = {
-    "Sylph": "<:wind:1417135422269689928>",
-    "Undine": "<:water:1417135449172082698>",
-    "Gnome": "<:earth:1417135502867300372>",
-    "Salamander": "<:fire:1417135359799726160>"
-     }
-    
+        "Sylph": "<:wind:1417135422269689928>",
+        "Undine": "<:water:1417135449172082698>",
+        "Gnome": "<:earth:1417135502867300372>",
+        "Salamander": "<:fire:1417135359799726160>"
+    }
+
     times_to_show = [time] if time and time in parties else parties.keys()
-    embed = discord.Embed(title="📋 รายชื่อปาร์ตี้",
-                          color=0x9400D3)  # สีหลักของ Embed
+    embeds = []
 
     for t in times_to_show:
-        lines = [f"⏰ เวลา {t}"]
-        for ch in parties[t]:
-            lines.append(f"__**{ch}**__")
-            for boss, members in parties[t][ch].items():
+        for ch, bosses in parties[t].items():
+            embed = discord.Embed(
+                title=f"📋 เวลา {t} - {ch}",
+                color=0x9400D3
+            )
+            for boss, members in bosses.items():
                 icon = boss_icons.get(boss, "🛡️")
-                lines.append(f"{icon} **{boss}**")
-                lines.append(format_members_vertical_numbered(members))
-        embed.add_field(name="\u200b", value="\n".join(lines), inline=False)
+                embed.add_field(
+                    name=f"{icon} {boss}",
+                    value=format_members_vertical_numbered(members),
+                    inline=True
+                )
+            embed.set_footer(text="Party System | By XeZer 😎")
+            embeds.append(embed)
 
-    embed.set_footer(text="Party System | By XeZer 😎")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embeds=embeds, ephemeral=True)
 
 
 @bot.tree.command(name="clear", description="ล้างข้อมูลปาร์ตี้ทั้งหมด")
