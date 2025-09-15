@@ -299,8 +299,13 @@ async def list_party(interaction: discord.Interaction, time: str = None):
         return "\n".join(f"{member_numbers[i]} {name[:12]}"
                          for i, name in enumerate(names[:5]))
 
-    boss_icons = {"Sylph": "🐉", "Undine": "💧", "Gnome": "🌱", "Salamander": "🔥"}
-
+    boss_icons = {
+    "Sylph": "<:wind:1417135422269689928>",
+    "Undine": "<:water:1417135449172082698>",
+    "Gnome": "<:earth:1417135502867300372>",
+    "Salamander": "<:fire:1417135359799726160>"
+     }
+    
     times_to_show = [time] if time and time in parties else parties.keys()
     embed = discord.Embed(title="📋 รายชื่อปาร์ตี้",
                           color=0x9400D3)  # สีหลักของ Embed
