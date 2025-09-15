@@ -313,13 +313,24 @@ async def list_party(interaction: discord.Interaction, time: str = None):
                 title=f"📋 เวลา {t} - {ch}",
                 color=0x9400D3
             )
-            for boss, members in bosses.items():
-                icon = boss_icons.get(boss, "🛡️")
-                embed.add_field(
-                    name=f"{icon} {boss}",
-                    value=format_members_vertical_numbered(members),
-                    inline=True
-                )
+
+            # จัด Sylph กับ Undine บน
+            for boss in ["Sylph", "Undine"]:
+                if boss in bosses:
+                    embed.add_field(
+                        name=f"{boss_icons[boss]} {boss}",
+                        value=format_members_vertical_numbered(bosses[boss]),
+                        inline=True
+                    )
+            # จัด Gnome กับ Salamander ล่าง
+            for boss in ["Gnome", "Salamander"]:
+                if boss in bosses:
+                    embed.add_field(
+                        name=f"{boss_icons[boss]} {boss}",
+                        value=format_members_vertical_numbered(bosses[boss]),
+                        inline=True
+                    )
+
             embed.set_footer(text="Party System | By XeZer 😎")
             embeds.append(embed)
 
