@@ -302,7 +302,7 @@ async def list_party(interaction: discord.Interaction, time: str = None):
                 lines.append(format_members_vertical_numbered(members))
         embed.add_field(name="\u200b", value="\n".join(lines), inline=False)
 
-    embed.set_footer(text="Party System | ไฮโซใน Discord 😎")
+    embed.set_footer(text="Party System | By XeZer 😎")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
