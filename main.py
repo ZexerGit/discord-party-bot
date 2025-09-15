@@ -136,7 +136,7 @@ class JoinView(discord.ui.View):
                 "⚠️ ต้องเลือกครบ เวลา/CH/Boss/จำนวนคน ก่อน", ephemeral=True)
             return
 
-        uid = self.user.id
+        uid = interaction.user.id
         if uid in user_party:
             await interaction.response.send_message(
                 "⚠️ คุณอยู่ปาร์ตี้อื่นอยู่แล้ว ใช้ Leave ก่อน", ephemeral=True)
@@ -147,8 +147,18 @@ class JoinView(discord.ui.View):
         remaining_slots = 5 - len(members)
 
         if remaining_slots <= 0:
-            await interaction.response.send_message("❌ ปาร์ตี้เต็มแล้ว",
-                                                    ephemeral=True)
+            # แสดงบอสอื่นที่ยังเหลือ slot
+            available_bosses = []
+            for boss, boss_members in parties[self.selected_time][self.selected_ch].items():
+                slots_left = 5 - len(boss_members)
+                if slots_left > 0:
+                    available_bosses.append(f"{boss}: {slots_left} ที่")
+            extra_msg = ""
+            if available_bosses:
+                extra_msg = "\n🎯 บอสอื่นที่ยังมีที่ว่าง:\n" + "\n".join(available_bosses)
+            await interaction.response.send_message(
+                f"❌ ปาร์ตี้เต็มแล้ว{extra_msg}",
+                ephemeral=True)
             return
 
         if self.selected_count > remaining_slots:
@@ -162,7 +172,7 @@ class JoinView(discord.ui.View):
                            self.selected_boss, self.selected_count)
 
         await interaction.response.send_message(
-            f"✅ {self.user.display_name} เข้าปาร์ตี้ {self.selected_time} {self.selected_ch} {self.selected_boss} "
+            f"✅ {interaction.user.display_name} เข้าปาร์ตี้ {self.selected_time} {self.selected_ch} {self.selected_boss} "
             f"({len(members)}/5 คน, ลงแทน {self.selected_count-1} คน)",
             ephemeral=True)
 
