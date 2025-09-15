@@ -147,15 +147,18 @@ class JoinView(discord.ui.View):
         remaining_slots = 5 - len(members)
 
         if remaining_slots <= 0:
-            # แสดงบอสอื่นที่ยังเหลือ slot
-            available_bosses = []
-            for boss, boss_members in parties[self.selected_time][self.selected_ch].items():
-                slots_left = 5 - len(boss_members)
-                if slots_left > 0:
-                    available_bosses.append(f"{boss}: {slots_left} ที่")
+            # ✅ หา slot ว่างจากทุก CH ของเวลาเดียวกัน
+            available = []
+            for ch, bosses in parties[self.selected_time].items():
+                for boss, boss_members in bosses.items():
+                    slots_left = 5 - len(boss_members)
+                    if slots_left > 0:
+                        available.append(f"{ch} - {boss}: {slots_left} ที่")
+
             extra_msg = ""
-            if available_bosses:
-                extra_msg = "\n🎯 บอสอื่นที่ยังมีที่ว่าง:\n" + "\n".join(available_bosses)
+            if available:
+                extra_msg = "\n🎯 ที่ว่างในเวลาเดียวกัน:\n" + "\n".join(available)
+
             await interaction.response.send_message(
                 f"❌ ปาร์ตี้เต็มแล้ว{extra_msg}",
                 ephemeral=True)
