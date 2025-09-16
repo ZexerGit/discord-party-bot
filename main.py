@@ -407,6 +407,11 @@ reaction_roles = {
         "role_name": "rom",
         "color": 0x9b59b6,
         "desc": "Game Ragnarok Eternal Love"
+    },
+    "<:stream:1417502619261337712>": {
+        "role_name": "livestream",
+        "color": 0x9b59b6,
+        "desc": "Participants and followers of YouTube live streams"
     }
 }
 ADMIN_CHANNEL_ID = 1417463299423076373  # Admin approval channel
@@ -564,6 +569,7 @@ async def setup_roles(interaction: discord.Interaction):
 
     view = RoleView()
     await interaction.response.send_message(embed=main_embed, view=view, ephemeral=False)
+
 
 
 
