@@ -157,11 +157,11 @@ class JoinView(discord.ui.View):
 
             extra_msg = ""
             if available:
-                extra_msg = "\n🎯 ที่ว่างในเวลาเดียวกัน:\n" + "\n".join(available)
+                extra_msg = "\n🎯 ที่ว่างในเวลาเดียวกัน:\n" + "\n".join(
+                    available)
 
             await interaction.response.send_message(
-                f"❌ ปาร์ตี้เต็มแล้ว{extra_msg}",
-                ephemeral=True)
+                f"❌ ปาร์ตี้เต็มแล้ว{extra_msg}", ephemeral=True)
             return
 
         if self.selected_count > remaining_slots:
@@ -290,12 +290,13 @@ async def list_party(interaction: discord.Interaction, time: str = None):
 
     def format_members_vertical_numbered(members):
         names = [
-            guild.get_member(uid).display_name if guild.get_member(uid) else str(uid)
-            for uid in members
+            guild.get_member(uid).display_name
+            if guild.get_member(uid) else str(uid) for uid in members
         ]
         while len(names) < 5:
             names.append("-")
-        return "\n".join(f"{member_numbers[i]} {name[:12]}" for i, name in enumerate(names[:5]))
+        return "\n".join(f"{member_numbers[i]} {name[:12]}"
+                         for i, name in enumerate(names[:5]))
 
     boss_icons = {
         "Sylph": "<:wind:1417135422269689928>",
@@ -308,30 +309,24 @@ async def list_party(interaction: discord.Interaction, time: str = None):
     embeds = []
 
     for t in times_to_show:
-        embed = discord.Embed(
-            title=f"📋 เวลา {t}",
-            color=0x9400D3
-        )
+        embed = discord.Embed(title=f"📋 เวลา {t}", color=0x9400D3)
 
         for ch, bosses in parties[t].items():
             value_lines = []
             for boss_group in [["Sylph", "Undine"], ["Gnome", "Salamander"]]:
                 for boss in boss_group:
                     if boss in bosses:
-                        value_lines.append(f"{boss_icons[boss]} {boss}\n{format_members_vertical_numbered(bosses[boss])}")
-            embed.add_field(
-                name=f"{ch}",
-                value="\n\n".join(value_lines),
-                inline=True
-            )
+                        value_lines.append(
+                            f"{boss_icons[boss]} {boss}\n{format_members_vertical_numbered(bosses[boss])}"
+                        )
+            embed.add_field(name=f"{ch}",
+                            value="\n\n".join(value_lines),
+                            inline=True)
 
         embed.set_footer(text="Party System | By XeZer 😎")
         embeds.append(embed)
 
     await interaction.response.send_message(embeds=embeds, ephemeral=True)
-
-
-
 
 
 @bot.tree.command(name="clear", description="ล้างข้อมูลปาร์ตี้ทั้งหมด")
@@ -392,6 +387,172 @@ async def delete(interaction: discord.Interaction, password: str):
 async def on_ready():
     await bot.tree.sync()
     print(f"✅ Bot Online as {bot.user}")
+
+
+# ------------------------------
+# Reaction Roles with Emoji Buttons + Modal + Admin Approval
+# ------------------------------
+reaction_roles = {
+    "<:ln2:1406935643665207337>": {
+        "role_name": "ln2",
+        "color": 0x1abc9c,
+        "desc": "Game Lineage2M"
+    },
+    "<:roo:1406935556956356739>": {
+        "role_name": "roo",
+        "color": 0xe67e22,
+        "desc": "Game Ragnarok Origin"
+    }
+}
+ADMIN_CHANNEL_ID = 1196758549993361482  # Admin approval channel
+
+
+@bot.tree.command(name="setup_roles",
+                  description="Request roles with admin approval")
+async def setup_roles(interaction: discord.Interaction):
+    """Post main message with emoji buttons for users to request roles."""
+
+    class RoleView(discord.ui.View):
+
+        def __init__(self):
+            super().__init__(timeout=None)
+            for emoji_str, info in reaction_roles.items():
+                emoji_obj = discord.PartialEmoji.from_str(emoji_str)
+                button = discord.ui.Button(style=discord.ButtonStyle.secondary,
+                                           emoji=emoji_obj)
+                button.callback = self.make_callback(info)
+                self.add_item(button)
+
+        def make_callback(self, info):
+            role_name = info["role_name"]
+            role_color = info["color"]
+
+            async def callback(interact: discord.Interaction):
+
+                class InfoModal(discord.ui.Modal,
+                                title=f"{role_name} Request"):
+                    character_name = discord.ui.TextInput(
+                        label="Character Name",
+                        placeholder="Enter your character name",
+                        max_length=50)
+                    contact = discord.ui.TextInput(
+                        label="Contract / Referral",
+                        placeholder="Who referred you or contract info",
+                        max_length=50)
+
+                    async def on_submit(
+                            self, modal_interaction: discord.Interaction):
+                        member = modal_interaction.user
+                        guild = modal_interaction.guild
+
+                        # Respond to user
+                        await modal_interaction.response.send_message(
+                            embed=discord.Embed(
+                                title="✅ Role Request Submitted!",
+                                description=
+                                (f"You have requested the role: **{role_name}**\n"
+                                 f"Character Name: `{self.character_name.value}`\n"
+                                 f"Contract / Referral: `{self.contact.value}`\n\n"
+                                 "Please wait for admin approval."),
+                                color=role_color),
+                            ephemeral=True)
+
+                        # Send to admin channel with Confirm/Reject buttons
+                        admin_channel = guild.get_channel(ADMIN_CHANNEL_ID)
+                        if not admin_channel:
+                            return
+
+                        class AdminView(discord.ui.View):
+
+                            def __init__(self):
+                                super().__init__(timeout=None)
+
+                                confirm_button = discord.ui.Button(
+                                    label="Confirm",
+                                    style=discord.ButtonStyle.green)
+                                reject_button = discord.ui.Button(
+                                    label="Reject",
+                                    style=discord.ButtonStyle.red)
+
+                                async def confirm_callback(
+                                        btn_interact: discord.Interaction):
+                                    role_obj = discord.utils.get(
+                                        guild.roles, name=role_name)
+                                    if role_obj and guild.me.top_role > role_obj:
+                                        await member.add_roles(role_obj)
+                                        await btn_interact.response.send_message(
+                                            f"✅ {member.display_name} has been granted the role **{role_name}**!",
+                                            ephemeral=True)
+                                        await btn_interact.message.edit(
+                                            view=None)
+                                        try:
+                                            await member.send(
+                                                f"🎉 Your role request **{role_name}** has been approved by admin!"
+                                            )
+                                        except:
+                                            pass
+                                    else:
+                                        await btn_interact.response.send_message(
+                                            "❌ Bot does not have permission to add this role",
+                                            ephemeral=True)
+
+                                async def reject_callback(
+                                        btn_interact: discord.Interaction):
+                                    await btn_interact.response.send_message(
+                                        f"❌ Role request of {member.display_name} has been rejected",
+                                        ephemeral=True)
+                                    await btn_interact.message.edit(view=None)
+                                    try:
+                                        await member.send(
+                                            f"❌ Your role request **{role_name}** was rejected by admin."
+                                        )
+                                    except:
+                                        pass
+
+                                confirm_button.callback = confirm_callback
+                                reject_button.callback = reject_callback
+                                self.add_item(confirm_button)
+                                self.add_item(reject_button)
+
+                        admin_embed = discord.Embed(
+                            title=f"📩 Role Request: {role_name}",
+                            color=role_color)
+                        admin_embed.add_field(name="User",
+                                              value=member.mention,
+                                              inline=False)
+                        admin_embed.add_field(name="Character Name",
+                                              value=self.character_name.value,
+                                              inline=False)
+                        admin_embed.add_field(name="Contract / Referral",
+                                              value=self.contact.value,
+                                              inline=False)
+                        admin_embed.set_footer(
+                            text="Admin Panel | Approve or Reject")
+                        await admin_channel.send(embed=admin_embed,
+                                                 view=AdminView())
+
+                await interact.response.send_modal(InfoModal())
+
+            return callback
+
+    # Main embed message
+    main_embed = discord.Embed(
+        title="👋 Request Your Role Here!",
+        description="Click the emoji buttons below to request a role:\n\n",
+        color=0x7289DA)
+
+    for emoji_str, info in reaction_roles.items():
+        main_embed.add_field(name=f"{emoji_str} {info['role_name']}",
+                             value=info['desc'],
+                             inline=False)
+
+    main_embed.set_footer(
+        text="Role Request System | Please fill in all information")
+
+    view = RoleView()
+    await interaction.response.send_message(embed=main_embed,
+                                            view=view,
+                                            ephemeral=False)
 
 
 # เรียก keep_alive ก่อนรันบอท
