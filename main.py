@@ -404,7 +404,7 @@ reaction_roles = {
         "desc": "Game Ragnarok Origin"
     }
 }
-ADMIN_CHANNEL_ID = 1196758549993361482  # Admin approval channel
+ADMIN_CHANNEL_ID = 1417463299423076373  # Admin approval channel
 
 
 @bot.tree.command(name="setup_roles",
