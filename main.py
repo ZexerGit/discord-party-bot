@@ -390,7 +390,7 @@ async def on_ready():
 
 
 # ------------------------------
-# Reaction Roles with Emoji Buttons + Modal + Admin Approval
+# Reaction Roles with Emoji Buttons + Modal + Admin Approval + Check Existing Role
 # ------------------------------
 reaction_roles = {
     "<:ln2:1406935643665207337>": {
@@ -410,7 +410,6 @@ reaction_roles = {
     }
 }
 ADMIN_CHANNEL_ID = 1417463299423076373  # Admin approval channel
-
 
 @bot.tree.command(name="setup_roles",
                   description="Request roles with admin approval")
@@ -433,24 +432,36 @@ async def setup_roles(interaction: discord.Interaction):
             role_color = info["color"]
 
             async def callback(interact: discord.Interaction):
+                member = interact.user
+                guild = interact.guild
+                role_obj = discord.utils.get(guild.roles, name=role_name)
 
-                class InfoModal(discord.ui.Modal,
-                                title=f"{role_name} Request"):
+                # Check if member already has the role
+                if role_obj in member.roles:
+                    await interact.response.send_message(
+                        f"⚠️ You already have the role **{role_name}**. Please do not click again.",
+                        ephemeral=True
+                    )
+                    return
+
+                # If not, open modal for input
+                class InfoModal(discord.ui.Modal, title=f"{role_name} Request"):
                     character_name = discord.ui.TextInput(
                         label="Character Name",
                         placeholder="Enter your character name",
-                        max_length=50)
+                        max_length=50
+                    )
                     contact = discord.ui.TextInput(
                         label="Contract / Referral",
                         placeholder="Who referred you or contract info",
-                        max_length=50)
+                        max_length=50
+                    )
 
-                    async def on_submit(
-                            self, modal_interaction: discord.Interaction):
+                    async def on_submit(self, modal_interaction: discord.Interaction):
                         member = modal_interaction.user
                         guild = modal_interaction.guild
 
-                        # Respond to user with ephemeral Embed
+                        # Respond to user
                         await modal_interaction.response.send_message(
                             embed=discord.Embed(
                                 title="✅ Role Request Submitted!",
@@ -460,8 +471,10 @@ async def setup_roles(interaction: discord.Interaction):
                                     f"Contract / Referral: `{self.contact.value}`\n\n"
                                     "Please wait for admin approval."
                                 ),
-                                color=role_color),
-                            ephemeral=True)
+                                color=role_color
+                            ),
+                            ephemeral=True
+                        )
 
                         # Send to admin channel with Confirm/Reject buttons
                         admin_channel = guild.get_channel(ADMIN_CHANNEL_ID)
@@ -469,26 +482,25 @@ async def setup_roles(interaction: discord.Interaction):
                             return
 
                         class AdminView(discord.ui.View):
-
                             def __init__(self):
                                 super().__init__(timeout=None)
 
                                 confirm_button = discord.ui.Button(
-                                    label="✅ Confirm",
-                                    style=discord.ButtonStyle.green)
+                                    label="✅ Confirm Role",
+                                    style=discord.ButtonStyle.green
+                                )
                                 reject_button = discord.ui.Button(
                                     label="❌ Reject",
-                                    style=discord.ButtonStyle.red)
+                                    style=discord.ButtonStyle.red
+                                )
 
-                                async def confirm_callback(
-                                        btn_interact: discord.Interaction):
-                                    role_obj = discord.utils.get(
-                                        guild.roles, name=role_name)
+                                async def confirm_callback(btn_interact: discord.Interaction):
                                     if role_obj and guild.me.top_role > role_obj:
                                         await member.add_roles(role_obj)
                                         await btn_interact.response.send_message(
                                             f"✅ {member.display_name} has been granted the role **{role_name}**!",
-                                            ephemeral=True)
+                                            ephemeral=True
+                                        )
                                         await btn_interact.message.edit(view=None)
                                         try:
                                             await member.send(
@@ -499,13 +511,14 @@ async def setup_roles(interaction: discord.Interaction):
                                     else:
                                         await btn_interact.response.send_message(
                                             "❌ Bot does not have permission to add this role",
-                                            ephemeral=True)
+                                            ephemeral=True
+                                        )
 
-                                async def reject_callback(
-                                        btn_interact: discord.Interaction):
+                                async def reject_callback(btn_interact: discord.Interaction):
                                     await btn_interact.response.send_message(
                                         f"❌ Role request of {member.display_name} has been rejected",
-                                        ephemeral=True)
+                                        ephemeral=True
+                                    )
                                     await btn_interact.message.edit(view=None)
                                     try:
                                         await member.send(
@@ -521,19 +534,13 @@ async def setup_roles(interaction: discord.Interaction):
 
                         admin_embed = discord.Embed(
                             title=f"📩 Role Request: {role_name}",
-                            color=role_color)
-                        admin_embed.add_field(name="User",
-                                              value=member.mention,
-                                              inline=False)
-                        admin_embed.add_field(name="Character Name",
-                                              value=self.character_name.value,
-                                              inline=False)
-                        admin_embed.add_field(name="Contract / Referral",
-                                              value=self.contact.value,
-                                              inline=False)
+                            color=role_color
+                        )
+                        admin_embed.add_field(name="User", value=member.mention, inline=False)
+                        admin_embed.add_field(name="Character Name", value=self.character_name.value, inline=False)
+                        admin_embed.add_field(name="Contract / Referral", value=self.contact.value, inline=False)
                         admin_embed.set_footer(text="Admin Panel | Approve or Reject")
-                        await admin_channel.send(embed=admin_embed,
-                                                 view=AdminView())
+                        await admin_channel.send(embed=admin_embed, view=AdminView())
 
                 await interact.response.send_modal(InfoModal())
 
@@ -542,21 +549,21 @@ async def setup_roles(interaction: discord.Interaction):
     # Main embed message
     main_embed = discord.Embed(
         title="👋 Request Your Role Here!",
-        description="Click the emoji buttons below to request your game role:\n\n",
-        color=0x7289DA)
+        description="Click the emoji buttons below to request a role:\n\n",
+        color=0x7289DA
+    )
 
     for emoji_str, info in reaction_roles.items():
-        main_embed.add_field(name=f"{emoji_str} {info['role_name'].upper()}",
-                             value=info['desc'],
-                             inline=False)
+        main_embed.add_field(
+            name=f"{emoji_str} {info['role_name']}",
+            value=info['desc'],
+            inline=False
+        )
 
-    main_embed.set_footer(
-        text="Role Request System | Fill all required information")
+    main_embed.set_footer(text="Role Request System | Please fill in all information")
 
     view = RoleView()
-    await interaction.response.send_message(embed=main_embed,
-                                            view=view,
-                                            ephemeral=False)
+    await interaction.response.send_message(embed=main_embed, view=view, ephemeral=False)
 
 
 
