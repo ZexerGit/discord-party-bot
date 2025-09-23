@@ -275,25 +275,11 @@ class DeleteView(discord.ui.View):
 @bot.tree.command(name="mhjoin",
                   description="เข้าปาร์ตี้แบบ UI เลือก เวลา/CH/Boss/จำนวนคน")
 async def mhjoin(interaction: discord.Interaction):
-    now = datetime.now(timezone(timedelta(hours=7)))  # เวลาปัจจุบัน (UTC+7)
-    join_hour, join_minute = map(int, join_start_time.split("."))
-    join_dt = now.replace(hour=join_hour, minute=join_minute, second=0, microsecond=0)
-
-    if now < join_dt:
-        await interaction.response.send_message(
-            f"⏳ ยังไม่ถึงเวลาที่กำหนด โปรดรอ {join_start_time} เป็นต้นไป",
-            ephemeral=True
-        )
-        return
-
     view = JoinView(interaction.user)
     await interaction.response.send_message(
         "เลือก เวลา / Channel / Boss / จำนวนคน แล้วกด ✅ ยืนยัน หรือ Leave",
         view=view,
-        ephemeral=True
-    )
-        
-        
+        ephemeral=True)
 
 
 @bot.tree.command(name="list", description="ดูรายชื่อปาร์ตี้")
@@ -302,32 +288,19 @@ async def list_party(interaction: discord.Interaction, time: str = None):
     guild = interaction.guild
     member_numbers = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
 
-    def clean_display_name(name: str) -> str:
-        """ตัด prefix ถ้าเป็นตัวเลข 3-4 หลัก ตามด้วย -"""
-        import re
-        if re.match(r"^\d{3,4} -", name):
-            return name.split("-", 1)[1]
-        return name
-
     def format_members_vertical_numbered(members):
-        names = []
-        for uid in members:
-            member = guild.get_member(uid)
-            if member:
-                name = clean_display_name(member.display_name)
-            else:
-                name = str(uid)
-            names.append(name)
-
+        names = [
+            guild.get_member(uid).display_name
+            if guild.get_member(uid) else str(uid) for uid in members
+        ]
         while len(names) < 5:
             names.append("-")
-
         return "\n".join(f"{member_numbers[i]} {name[:12]}"
                          for i, name in enumerate(names[:5]))
 
     boss_icons = {
         "Sylph": "<:wind:1417135422269689928>",
-        "Undine": "<:water:1417135449172082698>",  
+        "Undine": "<:water:1417135449172082698>",
         "Gnome": "<:earth:1417135502867300372>",
         "Salamander": "<:fire:1417135359799726160>"
     }
