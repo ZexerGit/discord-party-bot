@@ -29,8 +29,6 @@ parties = {
 }
 
 user_party = {}  # user_id -> (time, ch, boss, count)
-party_friend_names = {
-}  # (time, ch, boss) -> {user_id: [friend1, friend2,...]}
 
 join_start_time = "12.00"  # default join start time
 admin_password = "osysadmin"
@@ -149,78 +147,36 @@ class JoinView(discord.ui.View):
         remaining_slots = 5 - len(members)
 
         if remaining_slots <= 0:
-            await interaction.response.send_message("❌ ปาร์ตี้เต็มแล้ว",
-                                                    ephemeral=True)
+            # ✅ หา slot ว่างจากทุก CH ของเวลาเดียวกัน
+            available = []
+            for ch, bosses in parties[self.selected_time].items():
+                for boss, boss_members in bosses.items():
+                    slots_left = 5 - len(boss_members)
+                    if slots_left > 0:
+                        available.append(f"{ch} - {boss}: {slots_left} ที่")
+
+            extra_msg = ""
+            if available:
+                extra_msg = "\n🎯 ที่ว่างในเวลาเดียวกัน:\n" + "\n".join(
+                    available)
+
+            await interaction.response.send_message(
+                f"❌ ปาร์ตี้เต็มแล้ว{extra_msg}", ephemeral=True)
             return
 
         if self.selected_count > remaining_slots:
             await interaction.response.send_message(
-                f"⚠️ ปาร์ตี้เหลือ {remaining_slots} ที่ แต่คุณเลือก {self.selected_count} คน",
+                f"⚠️ ไม่สามารถเข้าร่วมปาร์ตี้ได้เนื่องจาก ปาร์ตี้เหลือ {remaining_slots} ที่ แต่คุณเลือก {self.selected_count} คน กรุณาลงใหม่",
                 ephemeral=True)
             return
 
-        extra_needed = self.selected_count - 1
-        if extra_needed > 0:
-
-            class FriendModal(discord.ui.Modal, title="Friend Name"):
-
-                def __init__(self):
-                    super().__init__(timeout=300)
-                    self.friend_inputs = []
-                    for i in range(extra_needed):
-                        field = discord.ui.TextInput(
-                            label=f"Friend Name {i+1}",
-                            placeholder="กรอกชื่อเพื่อน",
-                            max_length=50)
-                        self.friend_inputs.append(field)
-                        self.add_item(field)
-
-                async def on_submit(self,
-                                    modal_interaction: discord.Interaction):
-                    # ดึง members ปัจจุบันอีกครั้ง
-                    members = parties[self_view.selected_time][
-                        self_view.selected_ch][self_view.selected_boss]
-                    remaining_slots = 5 - len(members)
-
-                    # เช็คว่ามีที่ว่างพอไหม
-                    if remaining_slots < (extra_needed + 1):
-                        await modal_interaction.response.send_message(
-                            f"❌ ขอโทษนะ ปาร์ตี้เต็มไปแล้ว เหลือ {remaining_slots} ที่นั่ง",
-                            ephemeral=True)
-                        return
-
-                    # เพิ่มสมาชิก
-                    members.extend([uid] * (extra_needed + 1))
-                    user_party[uid] = (self_view.selected_time,
-                                       self_view.selected_ch,
-                                       self_view.selected_boss,
-                                       extra_needed + 1)
-
-                    # บันทึกชื่อเพื่อน
-                    key = (self_view.selected_time, self_view.selected_ch,
-                           self_view.selected_boss)
-                    if key not in party_friend_names:
-                        party_friend_names[key] = {}
-                    party_friend_names[key][uid] = [
-                        f.value for f in self.friend_inputs
-                    ]
-
-                    friend_names = ", ".join(f.value
-                                             for f in self.friend_inputs)
-                    await modal_interaction.response.send_message(
-                        f"✅ {interaction.user.display_name} เข้าปาร์ตี้ {self_view.selected_time} {self_view.selected_ch} {self_view.selected_boss} ({len(members)}/5 คน)\n👥 เพื่อนที่ลงด้วย: {friend_names}",
-                        ephemeral=True)
-
-            self_view = self
-            await interaction.response.send_modal(FriendModal())
-            return
-
-        # ถ้าเลือก 1 คน ไม่ต้องกรอกเพื่อน
-        members.append(uid)
+        members.extend([uid] * self.selected_count)
         user_party[uid] = (self.selected_time, self.selected_ch,
-                           self.selected_boss, 1)
+                           self.selected_boss, self.selected_count)
+
         await interaction.response.send_message(
-            f"✅ {interaction.user.display_name} เข้าปาร์ตี้ {self.selected_time} {self.selected_ch} {self.selected_boss} ({len(members)}/5 คน)",
+            f"✅ {interaction.user.display_name} เข้าปาร์ตี้ {self.selected_time} {self.selected_ch} {self.selected_boss} "
+            f"({len(members)}/5 คน, ลงแทน {self.selected_count-1} คน)",
             ephemeral=True)
 
     async def leave_callback(self, interaction: discord.Interaction):
@@ -236,11 +192,6 @@ class JoinView(discord.ui.View):
             if uid in members:
                 members.remove(uid)
 
-        # ลบชื่อเพื่อนด้วย
-        key = (time, ch, boss)
-        if key in party_friend_names and uid in party_friend_names[key]:
-            del party_friend_names[key][uid]
-
         del user_party[uid]
         await interaction.response.send_message(
             f"↩️ {self.user.display_name} ออกจากปาร์ตี้ {time} {ch} {boss} (คืน {count} ที่นั่ง)",
@@ -248,16 +199,12 @@ class JoinView(discord.ui.View):
 
 
 # ------------------------------
-# Delete View (Admin)
+# UI Delete View (Admin)
 # ------------------------------
 class DeleteView(discord.ui.View):
 
     def __init__(self):
         super().__init__(timeout=180)
-        self.selected_time = None
-        self.selected_ch = None
-        self.selected_boss = None
-
         self.time_select = discord.ui.Select(
             placeholder="เลือกเวลา",
             options=[discord.SelectOption(label=t) for t in parties.keys()])
@@ -287,6 +234,10 @@ class DeleteView(discord.ui.View):
         self.confirm_button.callback = self.confirm_callback
         self.add_item(self.confirm_button)
 
+        self.selected_time = None
+        self.selected_ch = None
+        self.selected_boss = None
+
     async def time_callback(self, interaction: discord.Interaction):
         self.selected_time = self.time_select.values[0]
         await interaction.response.defer(ephemeral=True)
@@ -313,11 +264,6 @@ class DeleteView(discord.ui.View):
                 del user_party[uid]
         parties[self.selected_time][self.selected_ch][self.selected_boss] = []
 
-        # ลบชื่อเพื่อน
-        key = (self.selected_time, self.selected_ch, self.selected_boss)
-        if key in party_friend_names:
-            del party_friend_names[key]
-
         await interaction.response.send_message(
             f"🧹 ลบผู้เล่นทั้งหมดใน {self.selected_time} {self.selected_ch} {self.selected_boss} แล้ว",
             ephemeral=True)
@@ -329,24 +275,25 @@ class DeleteView(discord.ui.View):
 @bot.tree.command(name="mhjoin",
                   description="เข้าปาร์ตี้แบบ UI เลือก เวลา/CH/Boss/จำนวนคน")
 async def mhjoin(interaction: discord.Interaction):
-    now = datetime.now(timezone(timedelta(hours=7)))
+    now = datetime.now(timezone(timedelta(hours=7)))  # เวลาปัจจุบัน (UTC+7)
     join_hour, join_minute = map(int, join_start_time.split("."))
-    join_dt = now.replace(hour=join_hour,
-                          minute=join_minute,
-                          second=0,
-                          microsecond=0)
+    join_dt = now.replace(hour=join_hour, minute=join_minute, second=0, microsecond=0)
 
     if now < join_dt:
         await interaction.response.send_message(
             f"⏳ ยังไม่ถึงเวลาที่กำหนด โปรดรอ {join_start_time} เป็นต้นไป",
-            ephemeral=True)
+            ephemeral=True
+        )
         return
 
     view = JoinView(interaction.user)
     await interaction.response.send_message(
         "เลือก เวลา / Channel / Boss / จำนวนคน แล้วกด ✅ ยืนยัน หรือ Leave",
         view=view,
-        ephemeral=True)
+        ephemeral=True
+    )
+        
+        
 
 
 @bot.tree.command(name="list", description="ดูรายชื่อปาร์ตี้")
@@ -356,51 +303,31 @@ async def list_party(interaction: discord.Interaction, time: str = None):
     member_numbers = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
 
     def clean_display_name(name: str) -> str:
+        """ตัด prefix ถ้าเป็นตัวเลข 3-4 หลัก ตามด้วย -"""
         import re
         if re.match(r"^\d{3,4} -", name):
             return name.split("-", 1)[1]
         return name
 
-    def format_members_vertical_numbered(members, key):
-        """
-        แสดงสมาชิก boss ตามลำดับ:
-        - ตำแหน่งแรก: display name ของคนลง
-        - ตำแหน่งต่อไป: friends ตามลำดับ
-        - จำกัดแสดง 5 คน
-        - ป้องกันชื่อซ้ำ
-        """
+    def format_members_vertical_numbered(members):
         names = []
-        added = set()  # track names already added
-
         for uid in members:
             member = guild.get_member(uid)
-            display_name = clean_display_name(
-                member.display_name) if member else str(uid)
+            if member:
+                name = clean_display_name(member.display_name)
+            else:
+                name = str(uid)
+            names.append(name)
 
-            if display_name not in added:
-                names.append(display_name)
-                added.add(display_name)
-
-            # เพิ่มชื่อเพื่อนทีละคน
-            friends = party_friend_names.get(key, {}).get(uid, [])
-            for friend in friends:
-                if friend not in added:
-                    names.append(friend)
-                    added.add(friend)
-
-        # เติม "-" ให้ครบ 5
         while len(names) < 5:
             names.append("-")
 
-        # ตัดให้แสดงแค่ 5 คน
-        names = names[:5]
-
         return "\n".join(f"{member_numbers[i]} {name[:12]}"
-                         for i, name in enumerate(names))
+                         for i, name in enumerate(names[:5]))
 
     boss_icons = {
         "Sylph": "<:wind:1417135422269689928>",
-        "Undine": "<:water:1417135449172082698>",
+        "Undine": "<:water:1417135449172082698>",  
         "Gnome": "<:earth:1417135502867300372>",
         "Salamander": "<:fire:1417135359799726160>"
     }
@@ -410,18 +337,19 @@ async def list_party(interaction: discord.Interaction, time: str = None):
 
     for t in times_to_show:
         embed = discord.Embed(title=f"📋 เวลา {t}", color=0x9400D3)
+
         for ch, bosses in parties[t].items():
             value_lines = []
             for boss_group in [["Sylph", "Undine"], ["Gnome", "Salamander"]]:
                 for boss in boss_group:
                     if boss in bosses:
-                        key = (t, ch, boss)
                         value_lines.append(
-                            f"{boss_icons[boss]} {boss}\n{format_members_vertical_numbered(bosses[boss], key)}"
+                            f"{boss_icons[boss]} {boss}\n{format_members_vertical_numbered(bosses[boss])}"
                         )
             embed.add_field(name=f"{ch}",
                             value="\n\n".join(value_lines),
                             inline=True)
+
         embed.set_footer(text="Party System | By XeZer 😎")
         embeds.append(embed)
 
@@ -435,7 +363,6 @@ async def clear(interaction: discord.Interaction):
             for boss in parties[t][ch]:
                 parties[t][ch][boss] = []
     user_party.clear()
-    party_friend_names.clear()
     await interaction.response.send_message("🧹 ล้างข้อมูลปาร์ตี้ทั้งหมดแล้ว",
                                             ephemeral=True)
 
@@ -445,9 +372,9 @@ async def helpme(interaction: discord.Interaction):
     msg = (
         "📖 **วิธีใช้งานบอทปาร์ตี้**\n"
         "`/mhjoin` → เลือก เวลา / Channel / Boss / จำนวนคน\n"
-        "`/list [เวลา]` → ดูรายชื่อปาร์ตี้\n"
+        "`/list [เวลา]` → ดูรายชื่อปาร์ตี้ (ใส่เวลา เช่น 16.00 หรือไม่ใส่เพื่อดูทั้งหมด)\n"
         "`/clear` → ล้างข้อมูลปาร์ตี้ทั้งหมด\n"
-        "`/settime time:<เวลา> password:<รหัส>` → ตั้งเวลาเริ่ม join\n"
+        "`/settime time:<เวลา> password:<รหัส>` → ตั้งเวลาเริ่ม join (default 12.00)\n"
         "`/delete password:<รหัส>` → ลบคนในปาร์ตี้ด้วยปุ่มเลือก เวลา/CH/Boss")
     await interaction.response.send_message(msg, ephemeral=True)
 
@@ -481,7 +408,7 @@ async def delete(interaction: discord.Interaction, password: str):
 
 
 # ------------------------------
-# Bot Ready
+# Run bot
 # ------------------------------
 @bot.event
 async def on_ready():
@@ -490,7 +417,7 @@ async def on_ready():
 
 
 # ------------------------------
-# Reaction Role System (เหมือนเดิม)
+# Reaction Roles with Emoji Buttons + Modal + Admin Approval + Check Existing Role
 # ------------------------------
 reaction_roles = {
     "<:ln2:1406935643665207337>": {
@@ -514,7 +441,7 @@ reaction_roles = {
         "desc": "Participants and followers of YouTube live streams"
     }
 }
-ADMIN_CHANNEL_ID = 1417463299423076373
+ADMIN_CHANNEL_ID = 1417463299423076373  # Admin approval channel
 
 @bot.tree.command(name="setup_roles",
                   description="Request roles with admin approval")
