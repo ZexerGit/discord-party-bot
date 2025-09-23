@@ -291,7 +291,7 @@ async def list_party(interaction: discord.Interaction, time: str = None):
     def clean_display_name(name: str) -> str:
         """ตัด prefix ถ้าเป็นตัวเลข 3-4 หลัก ตามด้วย -"""
         import re
-        if re.match(r"^\d{3,4}-", name):
+        if re.match(r"^\d{3,4} -", name):
             return name.split("-", 1)[1]
         return name
 
