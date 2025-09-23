@@ -275,11 +275,25 @@ class DeleteView(discord.ui.View):
 @bot.tree.command(name="mhjoin",
                   description="เข้าปาร์ตี้แบบ UI เลือก เวลา/CH/Boss/จำนวนคน")
 async def mhjoin(interaction: discord.Interaction):
+    now = datetime.now(timezone(timedelta(hours=7)))  # เวลาปัจจุบัน (UTC+7)
+    join_hour, join_minute = map(int, join_start_time.split("."))
+    join_dt = now.replace(hour=join_hour, minute=join_minute, second=0, microsecond=0)
+
+    if now < join_dt:
+        await interaction.response.send_message(
+            f"⏳ ยังไม่ถึงเวลาที่กำหนด โปรดรอ {join_start_time} เป็นต้นไป",
+            ephemeral=True
+        )
+        return
+
     view = JoinView(interaction.user)
     await interaction.response.send_message(
         "เลือก เวลา / Channel / Boss / จำนวนคน แล้วกด ✅ ยืนยัน หรือ Leave",
         view=view,
-        ephemeral=True)
+        ephemeral=True
+    )
+        
+        
 
 
 @bot.tree.command(name="list", description="ดูรายชื่อปาร์ตี้")
