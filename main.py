@@ -288,14 +288,31 @@ async def list_party(interaction: discord.Interaction, time: str = None):
     guild = interaction.guild
     member_numbers = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
 
+    def clean_display_name(name: str) -> str:
+        """ตัด prefix ถ้าเป็นตัวเลข 3-4 หลัก ตามด้วย -"""
+        if re.match(r"^\d{3,4}-", name):
+            name = name.split("-", 1)[1]
+        return name
+
+    def shorten_name(name: str, max_len: int = 12) -> str:
+        """ถ้ายาวเกิน max_len → ตัดแล้วเติม …"""
+        return name if len(name) <= max_len else name[:max_len - 1] + "…"
+
     def format_members_vertical_numbered(members):
-        names = [
-            guild.get_member(uid).display_name
-            if guild.get_member(uid) else str(uid) for uid in members
-        ]
+        names = []
+        for uid in members:
+            member = guild.get_member(uid)
+            if member:
+                name = clean_display_name(member.display_name)
+                name = shorten_name(name)
+            else:
+                name = str(uid)
+            names.append(name)
+
         while len(names) < 5:
             names.append("-")
-        return "\n".join(f"{member_numbers[i]} {name[:12]}"
+
+        return "\n".join(f"{member_numbers[i]} {name}"
                          for i, name in enumerate(names[:5]))
 
     boss_icons = {
@@ -319,9 +336,12 @@ async def list_party(interaction: discord.Interaction, time: str = None):
                         value_lines.append(
                             f"{boss_icons[boss]} {boss}\n{format_members_vertical_numbered(bosses[boss])}"
                         )
-            embed.add_field(name=f"{ch}",
-                            value="\n\n".join(value_lines),
-                            inline=True)
+
+            embed.add_field(
+                name=f"{ch}",
+                value=f"```yaml\n" + "\n\n".join(value_lines) + "\n```",
+                inline=True 
+            )
 
         embed.set_footer(text="Party System | By XeZer 😎")
         embeds.append(embed)
