@@ -162,14 +162,14 @@ class JoinView(discord.ui.View):
         extra_needed = self.selected_count - 1
         if extra_needed > 0:
 
-            class FriendModal(discord.ui.Modal, title="ใส่ชื่อเพื่อน"):
+            class FriendModal(discord.ui.Modal, title="Friend Name"):
 
                 def __init__(self):
                     super().__init__(timeout=300)
                     self.friend_inputs = []
                     for i in range(extra_needed):
                         field = discord.ui.TextInput(
-                            label=f"ชื่อเพื่อน {i+1}",
+                            label=f"Friend Name {i+1}",
                             placeholder="กรอกชื่อเพื่อน",
                             max_length=50)
                         self.friend_inputs.append(field)
