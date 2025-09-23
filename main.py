@@ -338,11 +338,9 @@ async def list_party(interaction: discord.Interaction, time: str = None):
                             f"{boss_icons[boss]} {boss}\n{format_members_vertical_numbered(bosses[boss])}"
                         )
 
-            embed.add_field(
-                name=f"{ch}",
-                value=f"```yaml\n" + "\n\n".join(value_lines) + "\n```",
-                inline=True 
-            )
+                        embed.add_field(name=f"{ch}",
+                            value="\n\n".join(value_lines),
+                            inline=True)
 
         embed.set_footer(text="Party System | By XeZer 😎")
         embeds.append(embed)
