@@ -1,6 +1,5 @@
 import os
 import discord
-import re
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta, timezone
@@ -291,13 +290,10 @@ async def list_party(interaction: discord.Interaction, time: str = None):
 
     def clean_display_name(name: str) -> str:
         """ตัด prefix ถ้าเป็นตัวเลข 3-4 หลัก ตามด้วย -"""
+        import re
         if re.match(r"^\d{3,4}-", name):
-            name = name.split("-", 1)[1]
+            return name.split("-", 1)[1]
         return name
-
-    def shorten_name(name: str, max_len: int = 12) -> str:
-        """ถ้ายาวเกิน max_len → ตัดแล้วเติม …"""
-        return name if len(name) <= max_len else name[:max_len - 1] + "…"
 
     def format_members_vertical_numbered(members):
         names = []
@@ -305,7 +301,6 @@ async def list_party(interaction: discord.Interaction, time: str = None):
             member = guild.get_member(uid)
             if member:
                 name = clean_display_name(member.display_name)
-                name = shorten_name(name)
             else:
                 name = str(uid)
             names.append(name)
@@ -313,12 +308,12 @@ async def list_party(interaction: discord.Interaction, time: str = None):
         while len(names) < 5:
             names.append("-")
 
-        return "\n".join(f"{member_numbers[i]} {name}"
+        return "\n".join(f"{member_numbers[i]} {name[:12]}"
                          for i, name in enumerate(names[:5]))
 
     boss_icons = {
         "Sylph": "<:wind:1417135422269689928>",
-        "Undine": "<:water:1417135449172082698>",
+        "Undine": "<:water:1417135449172082698>",  
         "Gnome": "<:earth:1417135502867300372>",
         "Salamander": "<:fire:1417135359799726160>"
     }
@@ -337,8 +332,7 @@ async def list_party(interaction: discord.Interaction, time: str = None):
                         value_lines.append(
                             f"{boss_icons[boss]} {boss}\n{format_members_vertical_numbered(bosses[boss])}"
                         )
-
-                        embed.add_field(name=f"{ch}",
+            embed.add_field(name=f"{ch}",
                             value="\n\n".join(value_lines),
                             inline=True)
 
